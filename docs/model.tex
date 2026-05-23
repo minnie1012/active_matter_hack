@@ -1,0 +1,338 @@
+\documentclass[11pt,letterpaper]{article}
+
+% --- packages -----------------------------------------------------------
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{graphicx}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+
+\title{\textbf{Tumor--Immune Active Matter}\\
+       \large Mathematical and physical model summary}
+\author{I-Tsen Tsai \\ {\small \texttt{i3tsai@ucsd.edu}}}
+\date{Vibe Coding Active Matter \& Biophysics Hackathon \\ UCSD --- May 23, 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We model the tumor microenvironment as a two-species active mixture in a 2D
+periodic box: slow self-propelled tumor cells that proliferate and secrete
+two diffusing chemicals, plus fast self-propelled T cells that chemotax up the
+attractant and down the suppressant and kill on contact. Three coupled
+ingredients --- non-conserved cell dynamics, two-scale chemical signaling
+with opposite signs, and overdamped Langevin self-propulsion --- generate a
+phase diagram with three biologically meaningful regimes (clearance,
+dormancy, escape) that map directly onto the clinical hot/excluded/cold
+tumor classification. This document collects every equation, parameter
+value, and numerical scheme in one place.
+\end{abstract}
+
+\section{Setup}
+
+A 2D periodic square box of side $L$ contains
+\begin{itemize}[nosep]
+  \item $N_T(t)$ tumor cells with positions $\mathbf{r}_i$ and headings
+        $\theta_i$, $i=1,\dots,N_T$;
+  \item $N_I(t)$ T cells with positions $\mathbf{R}_j$ and headings
+        $\phi_j$, $j=1,\dots,N_I$;
+  \item two scalar concentration fields $c_a(\mathbf{x},t)$ (attractant)
+        and $c_s(\mathbf{x},t)$ (suppressant) defined on a $G\times G$
+        grid covering the box.
+\end{itemize}
+Tumor cells are non-conserved: born by proliferation, removed by killing.
+T cells are conserved (no proliferation or natural death on the
+simulation timescale).
+
+\section{Tumor-cell dynamics}
+
+Tumor cells obey overdamped Langevin self-propulsion with soft pairwise
+repulsion and rotational diffusion:
+\begin{align}
+\frac{d\mathbf{r}_i}{dt}
+  &= v_T\, \mathbf{n}_i
+   + \sum_{j\ne i} \mathbf{F}_{\text{rep}}(\mathbf{r}_i - \mathbf{r}_j)
+   + \sum_{k}      \mathbf{F}_{\text{rep}}(\mathbf{r}_i - \mathbf{R}_k)
+   + \sqrt{2 D_T}\;\bm{\eta}_i(t), \label{eq:tumor_pos}\\[4pt]
+\frac{d\theta_i}{dt}
+  &= \sqrt{2 D_R^T}\,\xi_i(t), \label{eq:tumor_theta}
+\end{align}
+with $\mathbf{n}_i = (\cos\theta_i, \sin\theta_i)$ and unit-variance
+white noises $\bm{\eta}_i, \xi_i$ independent across particles and time.
+The repulsion is harmonic with cutoff at one cell diameter $\sigma$:
+\begin{equation}
+\mathbf{F}_{\text{rep}}(\mathbf{d})
+   = k_{\text{rep}}\,\max(0,\,\sigma - \|\mathbf{d}\|)\,\hat{\mathbf{d}}.
+\label{eq:harmonic}
+\end{equation}
+
+\paragraph{Proliferation.}
+At every step, each alive tumor cell $i$ attempts to divide independently
+with probability $p_{\text{div}}$, conditional on a local-density gate
+\begin{equation}
+n_i \;\equiv\; \big|\{j\ne i : \|\mathbf{r}_i - \mathbf{r}_j\| < r_{\text{nbr}}\}\big|
+                \;<\; n_{\max}.
+\label{eq:density_gate}
+\end{equation}
+If the gate passes, a daughter cell is placed at
+$\mathbf{r}_{i'} = \mathbf{r}_i + 0.3\,\sigma\,(\cos\psi,\sin\psi)$
+with $\psi\sim\mathcal{U}[0,2\pi)$, and a uniformly random heading.
+
+\section{T-cell dynamics}
+
+T cells are coupled to both chemical fields:
+\begin{align}
+\boxed{\;
+\frac{d\mathbf{R}_j}{dt}
+  = v_I\, \mathbf{m}_j
+  + \chi_a\, \nabla c_a\big|_{\mathbf{R}_j}
+  - \alpha\,  \nabla c_s\big|_{\mathbf{R}_j}
+  + \sum_{k\ne j} \mathbf{F}_{\text{rep}}(\mathbf{R}_j - \mathbf{R}_k)
+  + \sum_i        \mathbf{F}_{\text{rep}}(\mathbf{R}_j - \mathbf{r}_i)
+  + \sqrt{2 D_I}\,\bm{\zeta}_j(t)\;
+}
+\label{eq:tcell_pos}
+\end{align}
+\begin{equation}
+\frac{d\phi_j}{dt}
+   = \sqrt{2 D_R^I}\,\mu_j(t).
+\label{eq:tcell_phi}
+\end{equation}
+The crucial physical content is in the two chemotactic terms:
+\begin{itemize}[nosep]
+  \item $+\chi_a\,\nabla c_a$ pulls T cells \emph{up} the attractant
+        gradient --- toward tumor-secreted signals.
+  \item $-\alpha\,\nabla c_s$ pushes T cells \emph{down} the suppressant
+        gradient --- away from the tumor's immunosuppressive halo.
+\end{itemize}
+The coupling $\alpha\equiv\chi_s$ is the immunosuppression strength
+and is one of the two control parameters of the phase diagram. The other is
+$\rho_I\equiv N_I(0)$.
+
+\section{Reaction--diffusion fields}
+
+Both fields obey a diffusion--source--decay PDE with the tumor density
+$\rho_T(\mathbf{x},t)$ as the source:
+\begin{align}
+\frac{\partial c_a}{\partial t}
+   &= D_a\,\nabla^2 c_a + s_a\,\rho_T - \lambda_a\, c_a,
+   \label{eq:rd_a}\\[4pt]
+\frac{\partial c_s}{\partial t}
+   &= D_s\,\nabla^2 c_s + s_s\,\rho_T - \lambda_s\, c_s.
+   \label{eq:rd_s}
+\end{align}
+The defining asymmetry is $D_a \gg D_s$: attractant diffuses far, suppressant
+stays local. This separates spatial scales --- T cells can sense the tumor
+from across the box (long-range $c_a$), but only feel repulsion close in
+(short-range $c_s$). It is the competition between these two ranges, with
+opposite signs in the T-cell equation~\eqref{eq:tcell_pos}, that generates
+the phase diagram.
+
+\paragraph{Steady-state ranges.}
+Linearizing about a localized tumor source, the two fields have
+characteristic length scales
+\begin{equation}
+\ell_a = \sqrt{D_a/\lambda_a} \approx 7\sigma, \qquad
+\ell_s = \sqrt{D_s/\lambda_s} \approx 2.2\sigma,
+\label{eq:lengths}
+\end{equation}
+i.e.\ a ratio of $\approx 3.2$ at our parameter values.
+
+\paragraph{Cloud-in-cell deposition.}
+The tumor density on the grid is computed by bilinear deposition. For each
+tumor cell at fractional grid coordinates $(g_x, g_y)$ with integer parts
+$(I_x, I_y)$ and fractional parts $(f_x, f_y)$:
+\begin{equation}
+\rho_T(I_x{+}p, I_y{+}q) \mathrel{+}=
+   \frac{w_{p,q}}{(\Delta x)^2}, \qquad
+w_{p,q} = (1{-}f_x)^{1-p} f_x^{\,p}\,(1{-}f_y)^{1-q} f_y^{\,q},
+\label{eq:cic}
+\end{equation}
+for $(p,q)\in\{0,1\}^2$. Total mass is preserved exactly.
+
+\section{Killing rule}
+
+For each alive T cell $j$, the rule iterates as follows:
+\begin{enumerate}[nosep,leftmargin=*]
+  \item Find the nearest alive tumor cell $i^\star(j)$ under minimum-image
+        distance.
+  \item If $\|\mathbf{R}_j - \mathbf{r}_{i^\star}\| < r_{\text{kill}}$
+        \emph{and} $U \sim \mathcal{U}[0,1) < p_{\text{kill}}$, remove
+        tumor cell $i^\star$.
+\end{enumerate}
+The iteration is over T cells (\emph{not} over tumor cells), so the kill
+rate scales with $N_I$, not $N_T$. At most one kill per T cell per step.
+
+\section{Numerical methods}
+
+\subsection{Euler--Maruyama (particles)}
+One step of the integrator for tumor positions reads
+\begin{equation}
+\mathbf{r}_i^{\,n+1}
+   = \mathbf{r}_i^{\,n}
+   + \Delta t\,[\,v_T\,\mathbf{n}_i + \mathbf{F}_i\,]
+   + \sqrt{2 D_T \Delta t}\;\bm{\xi}_i^{\,n},
+\label{eq:em}
+\end{equation}
+with $\bm{\xi}_i^n \sim \mathcal{N}(0, I_2)$ i.i.d.\ across steps and
+particles. Positions are wrapped modulo $L$. Headings update by
+\eqref{eq:tumor_theta}/\eqref{eq:tcell_phi} with the same Euler step.
+
+\subsection{FTCS Euler + auto-subcycling (fields)}
+The five-point Laplacian stencil on the periodic grid:
+\begin{equation}
+\nabla^2 c\,\big|_{i,j} =
+   \frac{c_{i+1,j} + c_{i-1,j} + c_{i,j+1} + c_{i,j-1} - 4 c_{i,j}}
+        {(\Delta x)^2}.
+\label{eq:laplacian}
+\end{equation}
+The diffusion CFL ratio
+$\nu = D_{\max}\Delta t / (\Delta x)^2$ must satisfy $\nu \le 1/2$ for the
+explicit scheme to be stable. We use a stricter target $\nu_{\text{sub}}
+\le 1/4$ and subcycle:
+\begin{equation}
+n_{\text{sub}} = \max\!\big(1,\,\lceil 4\nu \rceil\big),\qquad
+\Delta t_{\text{sub}} = \Delta t / n_{\text{sub}}.
+\end{equation}
+
+\subsection{Gradient sampling}
+$\nabla c$ is needed at off-grid T-cell positions in \eqref{eq:tcell_pos}.
+We compute the central-difference gradient at every grid node and
+bilinearly interpolate from the four surrounding nodes, exactly dual to
+the CIC deposition~\eqref{eq:cic}.
+
+\subsection{Minimum-image distance under PBC}
+Inside every pairwise force loop:
+\begin{equation}
+d_x \leftarrow d_x - L\cdot\mathrm{round}(d_x/L), \qquad
+d_y \leftarrow d_y - L\cdot\mathrm{round}(d_y/L).
+\end{equation}
+
+\subsection{Performance notes}
+\begin{itemize}[nosep]
+  \item Single \texttt{@njit(cache=True, fastmath=True)} inner step.
+  \item Naive $O(N^2)$ pairwise force; at $N \lesssim 1500$ this is
+        $\sim 1$~ms/step on one CPU core --- well within the time budget.
+  \item Cell list ready to swap in if $N$ grows; not needed at current
+        parameters.
+  \item \texttt{joblib.Parallel(n\_jobs=-1, backend="loky")} for the
+        192-run sweep --- $\sim$10~min wall time on 16 cores.
+\end{itemize}
+
+\section{Parameter table}
+
+\begin{center}\small
+\begin{tabular}{l l r l}
+\toprule
+Symbol & Code name & Value & Meaning \\
+\midrule
+$L$            & \texttt{L}            & 100      & box side length \\
+$G$            & \texttt{G}            & 64       & field grid resolution \\
+$\Delta t$     & \texttt{dt}           & 0.01     & timestep \\
+$T_f$          & \texttt{T\_final}     & 100      & total simulated time \\
+\midrule
+$v_T$          & \texttt{v\_T}         & 0.1      & tumor self-propulsion speed \\
+$D_R^T$        & \texttt{D\_R\_T}      & 0.1      & tumor rotational diffusion \\
+$D_T^T$        & \texttt{D\_T\_T}      & 0.001    & tumor translational diffusion \\
+$\sigma$       & \texttt{sigma\_T}     & 1.0      & repulsion cutoff (cell diameter) \\
+$k_{\text{rep}}$ & \texttt{k\_rep\_T}  & 30       & repulsion stiffness \\
+$p_{\text{div}}$ & \texttt{p\_div}     & 0.004    & per-step division probability \\
+$r_{\text{nbr}}$ & \texttt{nbr\_radius}& 1.5      & neighbor-count radius (density gate) \\
+$n_{\max}$     & \texttt{nbr\_threshold} & 6      & max neighbors allowed for division \\
+\midrule
+$v_I$          & \texttt{v\_I}         & 1.0      & T-cell self-propulsion speed \\
+$D_R^I$        & \texttt{D\_R\_I}      & 1.0      & T-cell rotational diffusion \\
+$D_T^I$        & \texttt{D\_T\_I}      & 0.001    & T-cell translational diffusion \\
+$\chi_a$       & \texttt{chi\_a}       & 20.0     & attractant chemotactic coupling \\
+$\alpha=\chi_s$& \texttt{chi\_s}       & scanned  & suppressant chemotactic coupling \\
+\midrule
+$D_a$          & \texttt{D\_a}         & 5.0      & attractant diffusion \\
+$D_s$          & \texttt{D\_s}         & 0.5      & suppressant diffusion \\
+$s_a$          & \texttt{s\_a}         & 1.0      & attractant secretion rate \\
+$s_s$          & \texttt{s\_s}         & 1.0      & suppressant secretion rate \\
+$\lambda_a$    & \texttt{lam\_a}       & 0.1      & attractant decay rate \\
+$\lambda_s$    & \texttt{lam\_s}       & 0.1      & suppressant decay rate \\
+\midrule
+$r_{\text{kill}}$ & \texttt{r\_kill}   & 1.5      & killing engagement radius \\
+$p_{\text{kill}}$ & \texttt{p\_kill}   & 0.12     & per-T-cell per-step kill probability \\
+\midrule
+$N_T(0)$       & \texttt{N\_T\_initial}& 50       & initial tumor seed \\
+$\rho_I=N_I(0)$& \texttt{N\_I\_initial}& scanned  & initial T-cell count \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Five parameters were tuned away from the spec defaults so the three-phase
+structure becomes visible in the 8-hour time budget: $\chi_a$ $5\to 20$,
+$p_{\text{kill}}$ $0.05\to 0.12$, $p_{\text{div}}$ $0.005\to 0.004$, $T_f$
+$200\to 100$, $N_T^{\max}$ $4000\to 800$. See \texttt{docs/DECISIONS.md}.
+
+\section{Order parameter}
+
+The primary observable is the final tumor fraction, clipped for log
+plotting:
+\begin{equation}
+\Phi(\rho_I, \alpha) \equiv
+  \operatorname{clip}\!\left(\,\frac{N_T(T_f)}{N_T(0)},\;
+                              10^{-2},\; 10^{+2}\right),
+\end{equation}
+geometrically averaged over $S$ seeds:
+\begin{equation}
+\bar\Phi(\rho_I, \alpha)
+  = \exp\!\Big(\,S^{-1}\sum_{s=1}^{S} \log \Phi^{(s)}(\rho_I, \alpha)\Big).
+\end{equation}
+Secondary observables: time-resolved $N_T(t), N_I(t)$ trajectories.
+These distinguish \emph{clearance} (monotone fast decay), \emph{control /
+dormancy} (long plateau at intermediate $N_T$), and \emph{escape}
+(monotone rise to the array cap).
+
+\section{Key dimensionless groups}
+
+A way to organize the parameters:
+\begin{itemize}[nosep]
+  \item \textbf{Péclet of each species}:
+        $\mathrm{Pe} = v / (D_R\sigma)$.\\
+        $\mathrm{Pe}_T = 0.1/(0.1\cdot 1) = 1$,\quad
+        $\mathrm{Pe}_I = 1.0/(1.0\cdot 1) = 1$.
+  \item \textbf{Attractant range}:
+        $\ell_a = \sqrt{D_a/\lambda_a} \approx 7\sigma$.
+  \item \textbf{Suppressant range}:
+        $\ell_s = \sqrt{D_s/\lambda_s} \approx 2.2\sigma$.
+  \item \textbf{Range ratio}:
+        $\ell_a/\ell_s \approx 3.2$ --- the asymmetry that enables phase
+        separation.
+  \item \textbf{Suppression-to-attraction ratio}:
+        $\alpha/\chi_a$. At our $\chi_a = 20$, $\alpha\in[0,25]$ scans
+        this ratio from 0 to 1.25 --- bracketing the regime where
+        suppression overwhelms attraction.
+\end{itemize}
+
+\section{Relation to known active-matter theory}
+
+The model lives in the same theoretical neighborhood as Toner--Tu
+hydrodynamics of polar active matter (no proliferation),
+Joanny--Prost--Ranft growing active matter (proliferation as a
+non-conserved source), and Keller--Segel chemotaxis (the attractant
+feedback loop is the classical instability). The novel content here is
+the \emph{combination} of (i) long-range positive coupling via $c_a$ and
+(ii) short-range negative coupling via $c_s$ from the \emph{same} tumor
+source. That asymmetry generates the bistable phase boundary which maps
+onto the immune-excluded tumor histology.
+
+\section{Headline result}
+
+\begin{quote}
+\emph{In this two-species active matter, the transition between immune
+clearance and tumor escape is sharp and bistable. A simulated checkpoint
+inhibitor --- a sudden reduction of $\alpha$ at fixed $\rho_I$ --- moves
+the same initial state from escape to clearance, demonstrating that
+checkpoint inhibition is mechanistically equivalent to crossing the
+phase boundary in this model.}
+\end{quote}
+
+\end{document}
