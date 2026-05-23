@@ -21,16 +21,23 @@
 \maketitle
 
 \begin{abstract}
-We model the tumor microenvironment as a two-species active mixture in a 2D
+We model the tumor microenvironment as a multi-species active mixture in a 2D
 periodic box: slow self-propelled tumor cells that proliferate and secrete
-two diffusing chemicals, plus fast self-propelled T cells that chemotax up the
-attractant and down the suppressant and kill on contact. Three coupled
-ingredients --- non-conserved cell dynamics, two-scale chemical signaling
-with opposite signs, and overdamped Langevin self-propulsion --- generate a
-phase diagram with three biologically meaningful regimes (clearance,
-dormancy, escape) that map directly onto the clinical hot/excluded/cold
-tumor classification. This document collects every equation, parameter
-value, and numerical scheme in one place.
+diffusing chemicals, fast self-propelled CD8 T cells that chemotax up an
+attractant and down a suppressant and kill on contact, and macrophages
+that carry a continuous M1/M2 polarization driven by local cytokine
+signals. The cells are embedded in an extracellular matrix (ECM) density
+field that is degraded by tumor-secreted MMPs and that gates cell motion
+through drag and pore-size cutoffs. Cadherin-mediated cell--cell
+adhesion plus a Vicsek alignment torque is layered onto the tumor pairwise
+interaction. The full coupled system --- non-conserved cell dynamics,
+multi-scale chemical signaling with opposite signs, overdamped Langevin
+self-propulsion, mechanical-pressure-gated proliferation, ECM remodeling,
+and intercellular adhesion --- generates a phase diagram with three
+biologically meaningful regimes (clearance, dormancy, escape) that map
+directly onto the clinical hot/excluded/cold tumor classification. This
+document collects every equation, parameter value, and numerical scheme
+in one place.
 \end{abstract}
 
 \section{Setup}
@@ -324,15 +331,457 @@ the \emph{combination} of (i) long-range positive coupling via $c_a$ and
 source. That asymmetry generates the bistable phase boundary which maps
 onto the immune-excluded tumor histology.
 
+\section{Cell-level heterogeneity}
+
+Replace the scalar self-propulsion $v_T$ by per-cell $v_{T,i}$ drawn from a
+log-normal at birth, and similarly for rotational diffusion:
+\begin{equation}
+v_{T,i} \sim \mathrm{LogNormal}(\mu_v,\,\sigma_v^2),\qquad
+D_{R,i}^{T} \sim \mathrm{Gamma}(k_R, \theta_R).
+\end{equation}
+Mean and CV are user-set. Tumor daughters inherit with a small additive
+drift:
+$v_{T,i'} = v_{T,i} + \varepsilon,\ \varepsilon\sim\mathcal{N}(0, \sigma_\text{daughter}^2)$.
+
+\paragraph{Effect.} Broadens MIPS phase boundaries and creates a "slow core
++ fast invasive tail" inside the colony. Bimodal sharp phase transitions
+become smoother crossovers controlled by the upper quantile of the
+persistence-length distribution
+$\ell_{p,i} = v_{T,i}/D_{R,i}^{T}$ (Cates \& Tailleur 2015; Maiuri et al.\ 2015).
+
+\section{Pressure-gated proliferation (Byrne--Drasdo)}
+
+The discrete neighbor-count gate of §2 is replaced by a continuous
+mechanical-pressure gate. The local pressure is the trace of the pairwise
+stress accumulated inside the existing force loop:
+\begin{equation}
+P_i \;=\; \frac{1}{A_i}\sum_{j\in\mathcal{N}_i} \mathbf{r}_{ij}\cdot\mathbf{F}_{ij},
+\qquad A_i = \pi\sigma^2.
+\end{equation}
+The per-step division probability becomes
+\begin{equation}
+p_{\text{div},i} \;=\; p_{\text{div},0}\cdot \max\!\big(0,\,1 - P_i / P^\star\big).
+\end{equation}
+Daughter placement is unchanged (random direction at offset $0.3\sigma$);
+no pressure-induced apoptosis is included in the current implementation.
+
+\paragraph{Effect.} Replaces the cutoff artefact of the $n_{\max}$ rule by
+a smooth homeostatic-pressure plateau. Cells at the core of a tumor stop
+dividing because the local virial pressure exceeds $P^\star$; surface
+cells continue. Combined with §13 below, this produces a genuinely stable
+dormant fixed point: in the parameter slice where birth at the surface
+balances kill, $N_T$ settles into a steady-state instead of asymptotically
+escaping. References: Byrne \& Drasdo 2009; Ranft, Prost, Jülicher et al.\
+2010.
+
+\section{Macrophages: a third species with M1/M2 polarization}
+
+Introduce a third self-propelled species $\mathbf{M}$ with positions
+$\mathbf{R}_k^{(M)}$, headings $\phi_k^{(M)}$, and a continuous
+polarization scalar
+\begin{equation}
+p_k(t) \in [-1, +1], \qquad p_k = -1: \text{M2},\ p_k = +1: \text{M1}.
+\end{equation}
+
+\subsection{Position dynamics}
+
+Macrophages obey the same overdamped Langevin form as T cells but with
+weaker chemotaxis and lower speed/persistence:
+\begin{equation}
+\frac{d\mathbf{R}_k^{(M)}}{dt}
+  = v_M\,\mathbf{m}_k^{(M)}
+  + \chi_a^{(M)}\,\nabla c_a(\mathbf{R}_k^{(M)})
+  + \mathbf{F}_{\text{rep}}^{(M)}
+  + \sqrt{2 D_M}\,\boldsymbol{\eta}_k^{(M)}(t),
+\end{equation}
+with cross-species repulsion to tumor and T cells through
+$\mathbf{F}_{\text{rep}}^{(M)}$.
+
+\subsection{Polarization dynamics}
+
+The polarization relaxes toward an equilibrium set by local cytokine
+signals:
+\begin{equation}
+\boxed{\;
+\frac{d p_k}{dt}
+  = \frac{p_{\text{eq}}(\mathbf{R}_k^{(M)}) - p_k}{\tau_p}
+  + \sqrt{2 D_p}\,\zeta_k(t),
+\qquad
+p_{\text{eq}}(\mathbf{x}) \;=\; \tanh\!\big(b_{M_1} - \kappa_s\,c_s(\mathbf{x}) - \kappa_{IL}\,c_{IL10}(\mathbf{x})\big).
+\;}
+\end{equation}
+$b_{M_1}$ is an external M1-promoting bias used as the treatment knob; in
+the baseline run $b_{M_1}=0$ so polarization is driven entirely by local
+suppressant fields (positive feedback toward M2 inside the tumor core).
+$p_k$ is clipped to $[-1,+1]$ each step.
+
+\subsection{New cytokine field: IL-10}
+
+M2-skewed macrophages secrete a long-range CD8-repulsive cytokine,
+modelled as
+\begin{equation}
+\frac{\partial c_{IL10}}{\partial t} \;=\; D_{IL10}\,\nabla^2 c_{IL10}
+   + s_{IL10}\,\rho_{M_2}(\mathbf{x},t) - \lambda_{IL10}\,c_{IL10},
+\end{equation}
+\begin{equation}
+\rho_{M_2}(\mathbf{x},t) \;=\; \sum_k \max(0, -p_k)\,\delta(\mathbf{x}-\mathbf{R}_k^{(M)})
+   \quad \text{(only M2-skewed cells contribute)}.
+\end{equation}
+
+\subsection{Modified CD8 chemotaxis}
+
+The CD8 equation~\eqref{eq:tcell_pos} is extended so that suppression is
+no longer slaved to tumor location:
+\begin{equation}
+\frac{d\mathbf{R}_j}{dt}
+  = v_I\,\mathbf{m}_j
+  + \chi_a\,\nabla c_a(\mathbf{R}_j)
+  - \alpha\,\nabla\!\left[\,c_s(\mathbf{R}_j) + c_{IL10}(\mathbf{R}_j)\,\right]
+  + \mathbf{F}_{\text{rep}} + \sqrt{2 D_I}\,\boldsymbol{\zeta}_j(t).
+\end{equation}
+
+\subsection{M1 phagocytosis rule}
+
+For each macrophage with $p_k > 0$ within $r_{\text{phag}}$ of an alive
+tumor cell $i^\star$, the tumor cell is removed with probability
+\begin{equation}
+p_{\text{phag,eff}} \;=\; p_{\text{phag}}\cdot\frac{1 + p_k}{2}
+\quad\in\;[0,\,p_{\text{phag}}].
+\end{equation}
+Fully M1-polarized macrophages phagocytose at rate $p_{\text{phag}}$;
+fully M2 cells phagocytose at 0. At most one phagocytosis event per
+macrophage per step.
+
+\subsection{Treatment experiment: combination therapy}
+
+The natural mid-run knobs are
+\begin{itemize}[nosep]
+  \item $\alpha \to \alpha'$ at $t_{\text{treat}}$ \quad (anti-PD-1 / anti-PD-L1 mimic),
+  \item $b_{M_1} \to b'_{M_1} > 0$ at $t_{\text{treat}}$ \quad (TAM repolarization, e.g.\ CSF1R inhibitor or TLR agonist).
+\end{itemize}
+At moderate $\alpha$, anti-PD-1 alone rescues escape; TAM repolarization
+alone often fails because $c_{IL10}$ has already built up and the
+$-\kappa_{IL}c_{IL10}$ feedback locks polarization toward M2 even with
+$b_{M_1} > 0$. Combination therapy reliably rescues escape across the
+boundary region of the phase diagram.
+
+\section{ECM density and MMP degradation}
+
+Two additional scalar fields on the same $(G,G)$ grid:
+\begin{equation}
+\partial_t m \;=\; D_m\,\nabla^2 m + s_m\,\rho_T - \lambda_m\,m,
+\qquad
+\partial_t \rho_E \;=\; -k_{\text{deg}}\,m\,\rho_E + k_{\text{rec}}\,\rho_E(\rho_{E,0} - \rho_E).
+\end{equation}
+ECM density $\rho_E$ is initialized uniform at $\rho_{E,0}$ and decays
+locally under tumor-secreted MMP activity; the recovery term restores
+density slowly toward baseline.
+
+The ECM couples back to tumor motility through (i) a density-dependent
+drag and (ii) a pore-size cutoff:
+\begin{equation}
+\dot{\mathbf{r}}_i \;=\; \frac{1}{1 + \beta_{\text{drag}}\,\rho_E(\mathbf{r}_i)}\,\big[\,v_T\,\mathbf{n}_i + \mathbf{F}_i\,\big] + \sqrt{2 D_T}\,\boldsymbol{\eta}_i,
+\end{equation}
+with self-propulsion suppressed entirely (\,$v_{\text{eff}}=0$\,) whenever
+the local pore radius
+$r_p(\mathbf{x}) = r_0/\sqrt{\rho_E(\mathbf{x})}$ is smaller than the
+nuclear cross-section $r_p^\star$ \emph{and} the local MMP level lies
+below threshold:
+\begin{equation}
+v_{\text{eff}}(\mathbf{r}_i) \;=\;
+  \begin{cases}
+    0, & r_p(\mathbf{r}_i) < r_p^\star \text{ and } m(\mathbf{r}_i) < m^\star,\\[2pt]
+    v_T/(1+\beta_{\text{drag}}\rho_E(\mathbf{r}_i)), & \text{otherwise}.
+  \end{cases}
+\end{equation}
+The MMP gate models lytic digestion: if the local protease level exceeds
+$m^\star$, the cell ``opens'' the pore and proceeds even in dense matrix.
+Defaults are chosen so that $\rho_{E,0}=0$ recovers the baseline
+exactly.
+
+\paragraph{Effect.} Dense ECM compresses the escape phase and grows a
+new "matrix-jammed" regime. With MMP secretion active, the tumor carves
+a depleted-ECM cavity around itself --- the Friedl trail-blazing
+signature. References: Wolf \& Friedl 2013; Anderson \& Chaplain 1998;
+Deakin \& Chaplain 2013.
+
+\section{Cell--cell adhesion}
+
+A Morse-like attractive shoulder is added to the existing harmonic
+repulsion, acting between tumor cells only (cadherins are an epithelial
+marker):
+\begin{equation}
+\mathbf{F}_{cc}(\mathbf{d}) \;=\; \underbrace{k_{\text{rep}}\,\max(0,\sigma-|\mathbf{d}|)\,\hat{\mathbf{d}}}_{\text{baseline}}
+   \;-\; k_{\text{adh}}\,\max(0,|\mathbf{d}|-\sigma)\cdot\max(0,\sigma_{\text{adh}}-|\mathbf{d}|)\,\hat{\mathbf{d}}.
+\end{equation}
+An optional Vicsek aligning torque acts on cadherin neighbors:
+\begin{equation}
+\frac{d\theta_i}{dt} \;\mathrel{+}\!=\; \frac{J_{\text{align}}}{|\mathcal{N}_i|}\sum_{j\in\mathcal{N}_i} \sin(\theta_j - \theta_i),
+\quad \mathcal{N}_i = \{j: \sigma < |\mathbf{r}_{ij}| < \sigma_{\text{adh}}\}.
+\end{equation}
+
+\paragraph{Effect.} At $k_{\text{adh}}=0$ the tumor is a diffuse cloud
+of single cells. Increasing $k_{\text{adh}}$ converts it to a cohesive
+blob; adding the Vicsek term turns it into a streaming, hexagonally
+packed sheet --- the morphology of collective invasion. References:
+Friedl \& Gilmour 2012; Bi/Manning shape-index jamming (Bi et al.\ 2015,
+Ilina et al.\ 2020).
+
+\section{Hypoxia, angiogenesis, and extended cell repertoire}
+
+The final extension layer adds an oxygen field, vascular ``point''
+sources that move under angiogenic signalling, and three additional
+immune cell populations (NK, DC, MDSC) that share the existing
+overdamped-Langevin / soft-repulsion infrastructure.  Setting
+\texttt{s\_O2\_vessel}, the new pool sizes, and \texttt{s\_VEGF\_hyp} to
+$0$ degrades the model cleanly to the ECM-extended version of §13.
+
+\subsection{Oxygen reaction--diffusion field}
+Let $c_{O_2}(\mathbf{x},t)$ be the local oxygen concentration on the same
+$(G,G)$ periodic grid.  It is sourced by discrete vessel ``nodes''
+$\{\mathbf{V}_k\}_{k=1}^{N_V}$ (treated as point deposits) and consumed
+by every alive cell, irrespective of species:
+\begin{equation}
+\partial_t c_{O_2} \;=\; D_{O_2}\,\nabla^2 c_{O_2}
+   \;+\; s_{O_2}^{\text{vess}}\!\sum_{k=1}^{N_V}\delta(\mathbf{x}-\mathbf{V}_k)
+   \;-\; \bigl[\lambda_{O_2} + k_{O_2}^{\text{cons}}\,\rho_{\text{all}}(\mathbf{x},t)\bigr]\,c_{O_2},
+\end{equation}
+with the lumped consuming density
+\begin{equation}
+\rho_{\text{all}}(\mathbf{x},t) \;=\; \rho_T + \rho_I + \rho_M + \rho_{NK} + \rho_{DC} + \rho_{MDSC}.
+\end{equation}
+The initial condition is uniform normoxia, $c_{O_2}(\mathbf{x},0) = c_{O_2,0}$.
+A cell at position $\mathbf{x}$ is called \emph{hypoxic} when
+$c_{O_2}(\mathbf{x}) < c_{O_2}^{\,\text{hyp}}$.  The stepper is the same
+FTCS Euler subcycler used for the other RD fields, with the linear sink
+term $\lambda_{O_2} + k_{O_2}^{\text{cons}}\rho_{\text{all}}$ folded into
+the elementwise decay rate.
+
+\subsection{VEGF field and angiogenic vessels}
+A VEGF field is secreted only by \emph{hypoxic} tumor cells:
+\begin{equation}
+\partial_t c_{V} \;=\; D_V\,\nabla^2 c_V
+   \;+\; s_V^{\text{hyp}}\,\rho_T^{\text{hyp}}(\mathbf{x},t)
+   \;-\; \lambda_V\,c_V,
+\quad
+\rho_T^{\text{hyp}}(\mathbf{x},t)
+   \;=\!\!\sum_{i:\,c_{O_2}(\mathbf{r}_i)<c_{O_2}^{\,\text{hyp}}}\!\!\!\!\delta(\mathbf{x}-\mathbf{r}_i).
+\end{equation}
+Vessels are discrete nodes that drift up the VEGF gradient with small
+positional noise and may sprout to spawn new vessels:
+\begin{equation}
+\frac{d\mathbf{V}_k}{dt} \;=\; \chi_V\,\nabla c_V(\mathbf{V}_k)
+   \;+\; \sqrt{2 D_V^{\text{pos}}}\,\bm{\eta}_k^{V}(t),
+\qquad
+\mathbb{P}\bigl[\text{sprout from }k \text{ in } dt\bigr]
+   \;=\; r_{\text{sprout}}\,\mathbf{1}[c_V(\mathbf{V}_k)>c_V^{\star}]\,dt,
+\end{equation}
+with the new vessel placed at an offset of $\approx\sigma$ at a random
+angle.  Vessel count is capped by $N_V^{\max}$.
+
+\subsection{Hypoxia couplings}
+Three couplings of $c_{O_2}$ back to the cell-level dynamics:
+\begin{enumerate}[nosep,leftmargin=*]
+  \item \textbf{O$_2$-gated proliferation.}  The pressure-gated division
+        rate of §11 is multiplied by a smooth Hill-like factor in O$_2$:
+        \begin{equation}
+        p_{\text{div},i}^{\text{eff}} \;=\; p_{\text{div},0}\cdot\max(0,1-P_i/P^\star)\cdot
+          \sigma\!\left(\frac{c_{O_2}(\mathbf{r}_i) - c_{O_2}^{\text{div}}}{c_{O_2}^{\,\text{scale}}}\right),
+        \end{equation}
+        with $\sigma(z)=1/(1+e^{-z})$.  Severely hypoxic tumor cells
+        therefore quiesce.
+  \item \textbf{VEGF secretion.}  Only hypoxic tumor cells secrete VEGF
+        (see above), creating the natural feedback loop hypoxia $\to$
+        VEGF $\to$ vessel drift toward the hypoxic core.
+  \item \textbf{Reduced killing in hypoxic regions.}  Both CD8 and NK
+        effective kill probabilities are multiplied by
+        $(1 - \phi_{\text{hyp}}\,\mathbf{1}[c_{O_2}<c_{O_2}^{\,\text{hyp}}])$.
+\end{enumerate}
+
+\subsection{New cell populations}
+All three new populations evolve under the standard overdamped Langevin
+self-propulsion (§3) with species-specific speeds and chemotaxis
+couplings.
+
+\paragraph{Natural-killer (NK) cells.}
+Innate cytotoxic effectors; faster than CD8, weak attractant chemotaxis,
+\emph{not} suppressed by $c_s$ or $c_{IL10}$.  Their kill rule mirrors
+the CD8 rule but with smaller $p_{\text{kill}}^{NK}$:
+\begin{equation}
+\frac{d\mathbf{R}_k^{NK}}{dt}
+   \;=\; v_{NK}\,\mathbf{m}_k^{NK} + \chi_a^{NK}\,\nabla c_a
+   + \mathbf{F}_{\text{rep}}
+   + \sqrt{2 D_{NK}}\,\bm{\zeta}_k^{NK}.
+\end{equation}
+
+\paragraph{Dendritic cells (DC).}
+Antigen-presenting; strong chemotaxis up $c_a$, no direct killing.
+Their density is deposited onto a buff field $c_{DC}$:
+\begin{equation}
+\partial_t c_{DC} \;=\; D_{DC}\,\nabla^2 c_{DC} + s_{DC}\rho_{DC} - \lambda_{DC}c_{DC},
+\end{equation}
+which locally amplifies CD8 effective kill probability:
+\begin{equation}
+p_{\text{kill}}^{CD8,\text{eff}}(\mathbf{x})
+   \;=\; p_{\text{kill}}\,\bigl(1 + \beta_{DC}\,c_{DC}(\mathbf{x})\bigr)\,
+   \bigl(1 - \phi_{\text{hyp}}\,\mathbf{1}[c_{O_2}<c_{O_2}^{\,\text{hyp}}]\bigr).
+\end{equation}
+
+\paragraph{Myeloid-derived suppressor cells (MDSC).}
+Pure suppressor myeloids: motion like macrophages (slow, low
+persistence), chemotaxis up $c_a$, no killing or phagocytosis.  They
+contribute an additive source to $c_s$,
+\begin{equation}
+\partial_t c_s \;=\; D_s\,\nabla^2 c_s
+   + s_s\,\rho_T + s_s^{MDSC}\,\rho_{MDSC} - \lambda_s c_s,
+\end{equation}
+reinforcing the immunosuppressive halo independent of tumor location.
+
+\subsection{Derived plotting fields}
+For the renderer we compute two heuristic fields on the fly from the
+simulation state (these do not feed back into the dynamics):
+\begin{equation}
+\text{pH}(\mathbf{x},t) \;\approx\; 7.4 - 0.9\,\tilde\rho_T(\mathbf{x}),
+\qquad
+\text{ROS}(\mathbf{x},t) \;\approx\; \text{ROS}_0 + A\,\tilde\rho_T(\mathbf{x})\,\bigl(1 - \tilde c_{O_2}(\mathbf{x})\bigr),
+\end{equation}
+with $\tilde\rho_T, \tilde c_{O_2}$ normalised to $[0,1]$.  These
+reproduce the Warburg/lactate-acidified core and the
+hypoxia-plus-density ROS signature familiar from TME schematics.
+
+\section{Additional parameters}
+
+Defaults for heterogeneity, pressure-gated division, macrophages,
+ECM/MMP, cadherin adhesion, and the TME-extension layer.  Setting any
+of $\rho_{E,0}$, $s_m$, $k_{\text{adh}}$, $J_{\text{align}}$, the
+macrophage seed, or the new NK/DC/MDSC seed counts to $0$ disables the
+corresponding mechanism cleanly.
+
+\begin{center}\small
+\begin{tabular}{l l r l}
+\toprule
+Symbol & Code name & Value & Meaning \\
+\midrule
+\multicolumn{4}{l}{\emph{Pressure-gated proliferation}}\\
+$P^\star$           & \texttt{P\_star}      & 8.0   & homeostatic pressure scale \\
+$p_{\text{div},0}$  & \texttt{p\_div0}      & 0.004 & nominal per-step division probability \\
+\midrule
+\multicolumn{4}{l}{\emph{Macrophages \& IL-10 field}}\\
+$v_M$               & \texttt{v\_M\_mean}   & 0.2   & macrophage self-propulsion speed \\
+$\sigma_M$          & \texttt{sigma\_M}     & 1.0   & macrophage repulsion cutoff \\
+$k_{\text{rep}}^{M}$& \texttt{k\_rep\_M}    & 30    & macrophage repulsion stiffness \\
+$\chi_a^{(M)}$      & \texttt{chi\_a\_M}    & 8.0   & macrophage attractant coupling \\
+$\tau_p$            & \texttt{tau\_p}       & 15.0  & polarization relaxation time \\
+$D_p$               & \texttt{D\_p}         & 0.03  & polarization noise \\
+$\kappa_s$          & \texttt{kappa\_s}     & 8.0   & suppressant $\to$ M2 drive \\
+$\kappa_{IL}$       & \texttt{kappa\_il}    & 4.0   & IL-10 $\to$ M2 positive feedback \\
+$b_{M_1}$           & \texttt{M1\_bias}     & 0.0   & external M1-bias (treatment knob) \\
+$r_{\text{phag}}$   & \texttt{r\_phag}      & 1.8   & M1 phagocytosis engagement radius \\
+$p_{\text{phag}}$   & \texttt{p\_phag}      & 0.10  & base phagocytosis probability \\
+$D_{IL10}$          & \texttt{D\_IL10}      & 4.0   & IL-10 diffusion (long-range) \\
+$s_{IL10}$          & \texttt{s\_IL10}      & 1.0   & IL-10 secretion rate per M2 \\
+$\lambda_{IL10}$    & \texttt{lam\_IL10}    & 0.1   & IL-10 decay rate \\
+\midrule
+\multicolumn{4}{l}{\emph{ECM density + MMP}}\\
+$\rho_{E,0}$        & \texttt{rho\_E\_init} & 0 (off) & baseline ECM density (set $>0$ to enable) \\
+$D_m$               & \texttt{D\_m}         & 3.0   & MMP diffusion \\
+$s_m$               & \texttt{s\_m}         & 0 (off) & tumor MMP secretion rate \\
+$\lambda_m$         & \texttt{lam\_m}       & 0.15  & MMP decay rate \\
+$k_{\text{deg}}$    & \texttt{k\_deg}       & 1.0   & MMP-driven ECM degradation rate \\
+$k_{\text{rec}}$    & \texttt{k\_rep\_ECM}  & 0.005 & logistic ECM recovery rate \\
+$\beta_{\text{drag}}$ & \texttt{beta\_drag} & 0.8   & ECM drag coefficient \\
+$r_0$               & \texttt{r\_0}         & 1.0   & baseline pore-radius constant \\
+$r_p^\star$         & \texttt{r\_p\_star}   & 0.55  & nuclear-cross-section pore threshold \\
+$m^\star$           & \texttt{mmp\_open\_thresh} & 0.10 & MMP level opening jammed pores \\
+\midrule
+\multicolumn{4}{l}{\emph{Cell--cell adhesion (cadherins)}}\\
+$k_{\text{adh}}$    & \texttt{k\_adh}       & 8.0   & attractive shoulder stiffness \\
+$\sigma_{\text{adh}}$ & \texttt{sigma\_adh} & 1.6   & adhesion outer cutoff \\
+$J_{\text{align}}$  & \texttt{J\_align}     & 0.5   & Vicsek alignment coupling \\
+\midrule
+\multicolumn{4}{l}{\emph{Oxygen + VEGF + vasculature}}\\
+$D_{O_2}$              & \texttt{D\_O2}              & 8.0   & oxygen diffusion \\
+$\lambda_{O_2}$        & \texttt{lam\_O2}            & 0.02  & oxygen natural decay \\
+$k_{O_2}^{\text{cons}}$& \texttt{k\_O2\_cons}        & 0.35  & per-cell oxygen consumption \\
+$c_{O_2,0}$            & \texttt{O2\_init}           & 0.85  & uniform initial O$_2$ \\
+$c_{O_2}^{\,\text{hyp}}$ & \texttt{O2\_hyp\_thresh}  & 0.45  & hypoxia threshold \\
+$c_{O_2}^{\text{div}}$ & \texttt{O2\_div\_thresh}    & 0.5   & O$_2$ midpoint of division gate \\
+$c_{O_2}^{\,\text{scale}}$ & \texttt{O2\_div\_scale} & 0.10  & sigmoid sharpness \\
+$\phi_{\text{hyp}}$    & \texttt{hypoxia\_kill\_penalty} & 0.6 & hypoxic-region kill penalty \\
+$s_{O_2}^{\text{vess}}$& \texttt{s\_O2\_vessel}      & 3.0   & per-vessel O$_2$ deposit rate \\
+$\chi_V$               & \texttt{chi\_vessel}        & 80.0  & vessel drift up VEGF grad \\
+$D_V^{\text{pos}}$     & \texttt{D\_vessel}          & 0.02  & vessel positional noise \\
+$N_V^{\,0}$            & \texttt{n\_vessels\_init}   & 6     & initial vessel count \\
+$N_V^{\max}$           & \texttt{n\_vessels\_max}    & 32    & maximum vessel count (sprouting cap) \\
+$r_{\text{sprout}}$    & \texttt{sprout\_rate}       & 0.03  & per-step sprout probability \\
+$c_V^{\star}$          & \texttt{sprout\_VEGF\_thresh} & 0.005 & VEGF threshold to allow sprout \\
+$D_V$                  & \texttt{D\_VEGF}            & 3.0   & VEGF diffusion \\
+$\lambda_V$            & \texttt{lam\_VEGF}          & 0.10  & VEGF decay \\
+$s_V^{\text{hyp}}$     & \texttt{s\_VEGF\_hyp}       & 1.0   & VEGF source per hypoxic tumor cell \\
+\midrule
+\multicolumn{4}{l}{\emph{NK cells (innate cytotoxic)}}\\
+$v_{NK}$               & \texttt{v\_NK\_mean}        & 1.2   & NK self-propulsion speed \\
+$D_R^{NK}$             & \texttt{D\_R\_NK\_mean}     & 0.8   & NK rotational diffusion \\
+$\chi_a^{NK}$          & \texttt{chi\_a\_NK}         & 8.0   & NK attractant chemotaxis \\
+$r_{\text{kill}}^{NK}$ & \texttt{r\_kill\_NK}        & 1.4   & NK kill engagement radius \\
+$p_{\text{kill}}^{NK}$ & \texttt{p\_kill\_NK}        & 0.07  & NK per-step kill probability \\
+\midrule
+\multicolumn{4}{l}{\emph{Dendritic cells (DC) + buff field $c_{DC}$}}\\
+$v_{DC}$               & \texttt{v\_DC\_mean}        & 0.6   & DC self-propulsion speed \\
+$\chi_a^{DC}$          & \texttt{chi\_a\_DC}         & 30.0  & DC attractant chemotaxis (strong) \\
+$D_{DC}$               & \texttt{D\_DC}              & 1.0   & DC-buff field diffusion (short range) \\
+$s_{DC}$               & \texttt{s\_DC}              & 1.0   & DC-buff field source per DC \\
+$\lambda_{DC}$         & \texttt{lam\_DC}            & 0.3   & DC-buff field decay \\
+$\beta_{DC}$           & \texttt{cd8\_buff\_scale}   & 4.0   & DC-buff multiplier on $p_{\text{kill}}^{CD8}$ \\
+\midrule
+\multicolumn{4}{l}{\emph{MDSC (suppressor myeloids)}}\\
+$v_{MDSC}$             & \texttt{v\_MDSC\_mean}      & 0.2   & MDSC self-propulsion speed \\
+$\chi_a^{MDSC}$        & \texttt{chi\_a\_MDSC}       & 6.0   & MDSC attractant chemotaxis \\
+$s_s^{MDSC}$           & \texttt{s\_s\_MDSC}         & 0.6   & MDSC contribution to $c_s$ source \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Roadmap of further mechanisms}
+
+The following are flagged in \texttt{docs/extensions.md} with equations
+ready, not yet implemented:
+
+\begin{itemize}[nosep]
+  \item \textbf{§2 cell--ECM adhesion (integrins).} Per-cell engaged-integrin
+        state $e_i$ with biphasic DiMilla speed law.
+  \item \textbf{§4 ECM stiffness / durotaxis.} Young's-modulus field $E_m$
+        with drift $\chi_E\nabla E_m$ and stiffness-dependent speed.
+  \item \textbf{§5 fiber alignment.} Nematic director $Q(\mathbf{x})$ with
+        contact-guidance torque; anisotropic mobility tensor.
+  \item \textbf{Tregs, NK cells, MDSCs, CAFs.} See \texttt{docs/extensions.md}
+        Part~C for the active-matter representation of each.
+  \item \textbf{EMT continuous state.} Bistable Landau-like potential
+        coupling motility, adhesion, and MMP secretion to a single
+        epithelial-mesenchymal coordinate $s_i \in [0,1]$.
+\end{itemize}
+
 \section{Headline result}
 
 \begin{quote}
-\emph{In this two-species active matter, the transition between immune
-clearance and tumor escape is sharp and bistable. A simulated checkpoint
-inhibitor --- a sudden reduction of $\alpha$ at fixed $\rho_I$ --- moves
-the same initial state from escape to clearance, demonstrating that
-checkpoint inhibition is mechanistically equivalent to crossing the
-phase boundary in this model.}
+\emph{The transition between immune clearance and tumor escape is sharp
+and bistable in this active matter. A simulated checkpoint inhibitor ---
+a sudden reduction of $\alpha$ at fixed $\rho_I$ --- moves the same
+initial state from escape to clearance, demonstrating that checkpoint
+inhibition is mechanistically equivalent to crossing the phase boundary
+in this model. Macrophages make the suppressant field move and adapt:
+$c_{IL10}$ is sourced by a non-tumor species and follows the immune
+infiltrate, breaking the spatial slaving of suppression to tumor
+density, so that combination therapy --- simultaneous $\alpha$ knockdown
+and $M_1$-bias activation --- crosses the phase boundary even when
+either monotherapy fails. ECM density together with MMP secretion
+produces a matrix-jammed regime in which the tumor digests a depleted
+cavity around itself (Friedl trail-blazing). Cadherin adhesion plus
+Vicsek alignment converts a diffuse motile tumor into a streaming
+epithelial sheet. Pressure-gated proliferation produces a genuinely
+stable dormant fixed point in the boundary region of the phase diagram,
+populating the ``control'' phase that was only transient in the
+minimal two-species model.}
 \end{quote}
 
 \end{document}

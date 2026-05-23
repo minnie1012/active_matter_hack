@@ -264,3 +264,104 @@ and no direct measurement is **explicitly labeled a knob**.
 **Outcome.** A calibrated model where ≈ 5 parameters are pinned to data within an order of
 magnitude, 2 are inferred against an open dataset, and the remaining 2–3 are honestly
 flagged as scan axes.
+
+---
+
+## Hypoxia, angiogenesis, and extended cell repertoire — literature anchors
+
+Notes assembled for the planned extensions in `docs/extensions.md` (hypoxia/angiogenesis stack, NK, DC, MDSC, and a CAF stub). Same convention as §1: concrete numbers in parentheses with the canonical citation; "needs check" where I am not confident enough to attribute an author.
+
+### Hypoxia
+
+Normoxic interstitium sits at **30–40 mmHg pO₂** (skin, muscle); arterial blood is ≈ 95 mmHg. Solid-tumor cores routinely measure **median pO₂ < 10 mmHg** with substantial fractions of voxels **< 2.5 mmHg** ("severe hypoxia") — the foundational Eppendorf-electrode survey is **Vaupel, Kallinowski & Okunieff, *Cancer Res.* 49:6449 (1989)** and the follow-up review **Vaupel, *Semin. Radiat. Oncol.* 14:198 (2004)**. Cervical and head-and-neck tumors are the classic worst offenders (median ≈ 3–10 mmHg).
+
+**HIF-1α** (hypoxia-inducible factor α) is the master transcriptional sensor. Under normoxia, prolyl-hydroxylase-domain enzymes (PHD2 dominant) hydroxylate two prolines, VHL ubiquitinates, and the protein is destroyed in minutes. Stabilization is graded but effectively saturates **below ≈ 5 % O₂ (≈ 35 mmHg)**, and is strongly amplified **below 1–2 % O₂ (≈ 7–15 mmHg)** — see **Semenza, *Cell* 148:399 (2012)** and **Jaakkola et al., *Science* 292:468 (2001)**. Once stabilized, HIF-1α transactivates **VEGF-A, GLUT1, CA9, LDHA, EPO** and dozens of others; VEGF transcription rises roughly **10–30-fold** within hours of switching to 1 % O₂ (**Forsythe et al., *Mol. Cell. Biol.* 16:4604 (1996)**).
+
+Hypoxia arrests proliferation at the **G1/S checkpoint** under sustained **< 1 % O₂**, via p27, hypophosphorylated Rb, and reduced dNTP supply (**Gardner et al., *J. Biol. Chem.* 276:7919 (2001)**). At the population level, doubling-time prolongation by **2–5×** is typical.
+
+CTL and NK function collapses well before proliferation does. **Noman et al., *Cancer Res.* 71:5976 (2011)** showed HIF-1α-dependent upregulation of PD-L1 on tumor cells under hypoxia, plus reduced CTL lysis. **Vuillefroy de Silly, Dietrich & Walker, *OncoImmunology* 5:e1232236 (2016)** review the field and report **30–70 % reductions** in granzyme/perforin release and IFN-γ production at **1 % O₂** versus 21 %; NK cells are if anything more sensitive (**Balsamo et al., *Eur. J. Immunol.* 43:2756 (2013)**).
+
+**Parameter mapping.** Add a scalar oxygen field $c_{O_2}\in[0,1]$ on the existing grid (1 = arterial, 0 = anoxic). A defensible hypoxia threshold is `O2_hyp_thresh ≈ 0.1` (≈ 10 % of arterial, i.e. ≈ 10 mmHg, near the HIF saturation knee). For the killing penalty, parameterize as $p_{\text{kill}} \to p_{\text{kill}}\,(1 - h\,\Theta(\text{thresh}-c_{O_2}))$ with `hypoxia_penalty` $h \approx 0.5$ — i.e. cut $p_{\text{kill}}$ in half inside hypoxic voxels, consistent with the 30–70 % cytolysis loss above. Proliferation should get the same gate: $p_{\text{div}} \to p_{\text{div}}\,(1 - h_{\text{div}})$ with $h_{\text{div}} \approx 0.7$ in hypoxia.
+
+### Angiogenesis
+
+**VEGF-A** is the dominant pro-angiogenic ligand; **Ferrara, *Endocr. Rev.* 25:581 (2004)** is the canonical review, and **Carmeliet, *Nat. Med.* 9:653 (2003)** is the standard companion. Tumor cells secrete VEGF-A constitutively at low rates and at much higher rates under HIF-1α stabilization (§ above) — so VEGF in our model is naturally sourced by tumor cells in hypoxic voxels.
+
+Sprouting angiogenesis is the canonical mechanism: a quiescent capillary endothelium "wakes up," a **tip cell** specifies (Dll4/Notch lateral inhibition; **Hellström et al., *Nature* 445:776 (2007)**), and that tip cell migrates up the local VEGF gradient at **≈ 10–50 µm/h** in vitro and on the same order in vivo (**Gerhardt et al., *J. Cell Biol.* 161:1163 (2003)**). Tip-cell migration in our active-matter language is exactly a $+\chi\nabla c_{\text{VEGF}}$ term on a third particle species (endothelial sprouts) or, in the simpler continuum version, $\partial_t \rho_V = D_V\nabla^2 \rho_V + \chi_{\text{vessel}}\nabla\!\cdot(\rho_V \nabla c_{\text{VEGF}})$. Translating 10–50 µm/h to our units (1 σ ≈ 15 µm, 1 model time = 1 min) gives a tip-cell drift of **0.01–0.06 σ/min**, comparable to $v_T$. A defensible $\chi_{\text{vessel}}$ produces that drift in the steady-state VEGF gradient of the simulation.
+
+Tumor vessels are notoriously dysfunctional: **leaky, dilated, tortuous, chaotically branched, with poor pericyte coverage** — see **Folkman, *N. Engl. J. Med.* 285:1182 (1971)** for the original conceptual paper and **Carmeliet & Jain, *Nature* 407:249 (2000)** for the structural review. The clinical consequence is heterogeneous perfusion: vessel density can be high while *functional* perfusion is low. This is exactly what permits the persistent hypoxia of the previous section despite a vessel-rich stroma.
+
+**Jain, *Science* 307:58 (2005)** introduced the **vessel-normalization** paradigm: low-dose anti-VEGF (bevacizumab, etc.) prunes immature sprouts and transiently restores a more regular vasculature with better O₂ delivery and drug penetration — a 1–2 week window. In our model, this maps to turning OFF the sprouting source term and `chi_vessel` partway through a simulation: existing chaotic vessels regress (decay term on $\rho_V$), oxygen normalizes, and the hypoxia-dependent suppression terms should relax. That is the cleanest qualitative target for an anti-angiogenic treatment experiment.
+
+### NK cells
+
+**Natural killer cells** are innate lymphocytes that kill **without prior antigen sensitization and without MHC-restricted TCR recognition**. The dominant detection logic is **"missing self"** (**Kärre, *Scand. J. Immunol.* 55:221 (2002)**; **Vivier et al., *Science* 331:44 (2011)**): inhibitory receptors (KIR in humans, Ly49 in mice) read self-MHC-I; loss of MHC-I — common in tumors escaping CTL pressure — releases the inhibitory brake, while activating receptors (NKG2D reading stress ligands MICA/B, ULBP1–6) provide the "go" signal.
+
+Chemotactic repertoire is partially overlapping with CD8 but distinct enough to model separately. NK cells respond strongly to **CX3CL1 (fractalkine)**, **CXCL10 / CXCR3**, **CCL5 / CCR5**, **S1P / S1PR5**; they are **less responsive to CCL19/CCL21** (lymph-node homing), which is a hallmark of CD8 trafficking. See **Bernardini, Antonangeli, Bonanni & Santoni, *Front. Immunol.* 7:402 (2016)** for a focused review.
+
+The model architectural reason to give NK their own equation rather than reusing the CD8 one is the **absence of a checkpoint-style $-\alpha\nabla c_s$ term**. NK cells are not the primary targets of PD-1/PD-L1 in the way exhausted CD8s are — they express PD-1 at lower levels and the dominant suppressive axis on NK cells in tumors is **TGF-β (canonical: needs check for a quantitative NK-specific number)** and adenosine (A2AR). Coarse-graining: in v1 we omit the suppressant coupling for NK and let them roam more freely, then optionally add a separate TGF-β–driven slowdown later.
+
+Per-encounter killing efficacy is lower than CD8: **5–15 %** per conjugate is the typical microfluidic number, with **2–3× higher motility** than CD8 in tissue (**Deguine, Breart, Lemaître & Bousso, *Immunity* 33:632 (2010)** in lymph nodes; numbers in solid tumors are scarcer — needs check). Implementation: copy the T-cell scaffolding, set $v_{NK} \approx 2 v_I$, $p_{\text{kill}}^{NK} \approx 0.05$, drop the $-\alpha\nabla c_s$ term, optionally bias chemotaxis toward a new $c_{\text{CXCL10}}$ field.
+
+### Dendritic cells
+
+**Conventional DCs (cDC1 in particular)** sample tumor antigens, mature, and migrate via **CCR7 / CCL19,21** to the **tumor-draining lymph node**, where they prime naive CD8 T cells. **Gardner & Ruffell, *Trends Immunol.* 37:855 (2016)** is the standard review of intratumoral DC biology; **Roberts et al., *Cancer Cell* 30:324 (2016)** establishes the dominance of cDC1 (Batf3-dependent) for cross-presentation in tumors.
+
+Our 2D periodic-box model has **no lymph-node compartment**. The defensible coarse-graining is to skip the round trip entirely and let DCs act locally as **antigen-presentation hotspots**: each mature DC deposits a short-range field $c_{DC}(\mathbf{x},t)$ via the same RD machinery as $c_a, c_s$, and CD8 effective $p_{\text{kill}}$ is multiplicatively boosted in regions where $c_{DC}$ is high. This collapses two real biological steps (DC → LN → primed CD8 → return to tumor) into one local "the CD8 here has seen the antigen recently" buff. It is correct in steady state when the lymph-node transit is fast compared to the simulation horizon (real DC-to-LN transit ≈ 12–24 h; our $T_f = 100$ min, so technically the steady-state assumption is **a stretch** — flag this).
+
+Functional dichotomy: **mature, immunostimulatory DCs** vs. **tolerogenic / "regulatory" DCs** induced by tumor-derived IL-10, TGF-β, VEGF (**Gardner & Ruffell 2016**; **Veglia & Gabrilovich, *Curr. Opin. Immunol.* 45:43 (2017)**). One could model a DC polarization scalar analogous to the macrophage $p_k$ in `extensions.md` Part B; for v1 we assume all DCs are mature.
+
+Suggested numbers: $v_{DC} \approx 0.3\,v_I$ (slower, intermediate between TAM and CD8), short-range $D_{DC} \approx D_s$, secretion rate tuned so peak $c_{DC}$ at $\sigma$ from a DC matches the magnitude of $c_a$ from a tumor cell. The CD8 $p_{\text{kill}}$ multiplier could be $(1 + \beta_{DC}\,c_{DC})$ with $\beta_{DC}$ scanned in $[0, 5]$.
+
+### MDSCs
+
+**Myeloid-derived suppressor cells** are a heterogeneous population of immature myeloid cells (granulocytic / PMN-MDSC and monocytic M-MDSC subsets in humans, Ly6G⁺/Ly6C⁺ respectively in mice) **expanded under chronic tumor-derived inflammatory signals** — GM-CSF, G-CSF, IL-6, S100A8/9 (**Gabrilovich & Nagaraj, *Nat. Rev. Immunol.* 9:162 (2009)**; **Veglia, Sanseviero & Gabrilovich, *Nat. Immunol.* 22:108 (2021)**).
+
+Their suppression mechanisms are biochemically diverse but converge on T-cell dysfunction: **Arginase-1** (depletes L-arginine, downregulates CD3ζ), **iNOS** (NO and peroxynitrite that nitrate the TCR), **ROS**, **TGF-β**, **IL-10**, **adenosine via CD39/CD73**, and direct contact-dependent Treg induction. Coarse-graining all of this into "MDSCs add to the suppressant field $c_s$" is justifiable for v1: every one of those mechanisms reduces CTL effector function at short range from the MDSC, which is exactly the operational definition of $c_s$ in our model.
+
+Clinical correlation: **higher circulating and intratumoral MDSC counts predict worse OS and resistance to checkpoint blockade** across melanoma, RCC, NSCLC, GBM (**Diaz-Montero et al., *Cancer Immunol. Immunother.* 58:49 (2009)**; **Weide et al., *Clin. Cancer Res.* 20:1601 (2014)**).
+
+Abundance: highly tumor- and patient-dependent. In aggressive solid tumors MDSCs can reach **5–20 % of CD45⁺ infiltrate**, **comparable to or slightly less than TAMs** (canonical numbers vary; needs check for a single representative figure). Implementation: identical scaffolding to the macrophage extension, but only the M2-equivalent $c_s$ source term — no phagocytosis, no polarization switch. $v_{MDSC} \approx v_M \approx 0.2\,v_I$.
+
+### CAFs (placeholder — not implemented)
+
+**Cancer-associated fibroblasts** are a stromal cell type that deposits and remodels ECM, secretes growth factors (TGF-β, HGF, FGF, CXCL12), and is the dominant non-immune driver of T-cell exclusion in many carcinomas (**Kalluri, *Nat. Rev. Cancer* 16:582 (2016)**; **Mariathasan et al., *Nature* 554:544 (2018)** for the TGF-β / CAF / exclusion axis; **Feig et al., *PNAS* 110:20212 (2013)** for FAP⁺ CAFs and CXCL12 sequestration of CD8).
+
+Future-extension sketch (do not implement in the hackathon scope): a **stationary or slowly-moving** CAF species concentrated near the tumor margin, with a local source term on a new ECM field $\rho_E(\mathbf{x},t)$ — i.e. $\partial_t \rho_E = s_E \rho_{CAF} - k_{\text{deg}} m \rho_E$, where $\rho_E$ then acts as the drag / pore-size gate of `extensions.md` §3. This cleanly composes with the MMP field of §6 and is the natural backbone for a quantitative T-cell-exclusion phenotype.
+
+---
+
+## References
+
+Canonical anchors for the section above. Author–year–journal only; full DOIs in `docs/extensions.md` where they overlap.
+
+* Vaupel P, Kallinowski F, Okunieff P. *Cancer Res.* 49:6449 (1989) — Eppendorf pO₂ survey.
+* Vaupel P. *Semin. Radiat. Oncol.* 14:198 (2004) — hypoxia in tumors review.
+* Semenza GL. *Cell* 148:399 (2012) — HIF biology master review.
+* Jaakkola P et al. *Science* 292:468 (2001) — PHD/VHL O₂-sensing mechanism.
+* Forsythe JA et al. *Mol. Cell. Biol.* 16:4604 (1996) — HIF-1 transactivates VEGF.
+* Gardner LB et al. *J. Biol. Chem.* 276:7919 (2001) — hypoxic G1/S arrest.
+* Noman MZ et al. *Cancer Res.* 71:5976 (2011) — hypoxia, HIF, PD-L1, CTL suppression.
+* Vuillefroy de Silly R, Dietrich P-Y, Walker PR. *OncoImmunology* 5:e1232236 (2016) — hypoxia and CTL/NK dysfunction.
+* Balsamo M et al. *Eur. J. Immunol.* 43:2756 (2013) — hypoxia and NK function.
+* Ferrara N. *Endocr. Rev.* 25:581 (2004) — VEGF biology.
+* Carmeliet P. *Nat. Med.* 9:653 (2003) — angiogenesis review.
+* Folkman J. *N. Engl. J. Med.* 285:1182 (1971) — tumor angiogenesis original.
+* Carmeliet P, Jain RK. *Nature* 407:249 (2000) — vascular abnormalities.
+* Jain RK. *Science* 307:58 (2005) — vessel normalization.
+* Hellström M et al. *Nature* 445:776 (2007) — Dll4/Notch tip-cell selection.
+* Gerhardt H et al. *J. Cell Biol.* 161:1163 (2003) — tip-cell VEGF gradient migration.
+* Kärre K. *Scand. J. Immunol.* 55:221 (2002) — missing-self hypothesis.
+* Vivier E et al. *Science* 331:44 (2011) — NK cell innate immunity review.
+* Bernardini G, Antonangeli F, Bonanni V, Santoni A. *Front. Immunol.* 7:402 (2016) — NK chemokine receptors.
+* Deguine J, Breart B, Lemaître F, Bousso P. *Immunity* 33:632 (2010) — NK killing imaging.
+* Gardner A, Ruffell B. *Trends Immunol.* 37:855 (2016) — tumor DC biology.
+* Roberts EW et al. *Cancer Cell* 30:324 (2016) — cDC1 cross-presentation in tumors.
+* Veglia F, Gabrilovich DI. *Curr. Opin. Immunol.* 45:43 (2017) — DC dysfunction in cancer.
+* Gabrilovich DI, Nagaraj S. *Nat. Rev. Immunol.* 9:162 (2009) — MDSC review.
+* Veglia F, Sanseviero E, Gabrilovich DI. *Nat. Immunol.* 22:108 (2021) — MDSC update.
+* Diaz-Montero CM et al. *Cancer Immunol. Immunother.* 58:49 (2009) — MDSCs and prognosis.
+* Weide B et al. *Clin. Cancer Res.* 20:1601 (2014) — MDSCs and melanoma OS.
+* Kalluri R. *Nat. Rev. Cancer* 16:582 (2016) — CAF biology.
+* Mariathasan S et al. *Nature* 554:544 (2018) — TGF-β / CAF / immune exclusion.
+* Feig C et al. *PNAS* 110:20212 (2013) — FAP⁺ CAFs and CXCL12.

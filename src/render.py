@@ -255,7 +255,7 @@ def compose_frame(
     # header text (monospace)
     header = f"t = {t:6.2f}    rho_I = {rho_I:3d}    alpha = {alpha:5.2f}    N_T = {len(pos_T):4d}    N_I = {len(pos_I):4d}"
     main_ax.text(
-        0.5, 1.02, header, transform=main_ax.transAxes,
+        0.5, 1.005, header, transform=main_ax.transAxes,
         color=style.FG, fontsize=style.SMALL_SIZE,
         family=style.FONT_MONO, ha="center", va="bottom",
     )
@@ -299,12 +299,12 @@ def make_video(
     style.apply_style()
     fig = plt.figure(figsize=(12.0, 8.0), dpi=dpi)
     fig.patch.set_facecolor(style.BG)
-    main_ax = fig.add_axes([0.05, 0.06, 0.62, 0.88])
+    main_ax = fig.add_axes([0.05, 0.06, 0.62, 0.80])
     side_ax = fig.add_axes([0.74, 0.20, 0.23, 0.55])
     main_ax.set_facecolor(style.BG)
     side_ax.set_facecolor(style.BG)
     if title:
-        fig.suptitle(title, color=style.FG, fontsize=style.LABEL_SIZE, y=0.98)
+        fig.suptitle(title, color=style.FG, fontsize=style.LABEL_SIZE, y=0.965)
 
     # find ffmpeg via imageio-ffmpeg if needed
     try:

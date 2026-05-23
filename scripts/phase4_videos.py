@@ -36,7 +36,7 @@ def render_phase(label: str, rho_I: int, alpha: float, seed: int) -> None:
     out = run(
         rho_I=rho_I, alpha=alpha, seed=seed,
         params=base,
-        snapshot_every=50,            # 200 frames at T_final=100, dt=0.01
+        snapshot_every=25,            # 400 frames at T_final=100, dt=0.01
         save_fields=True,
     )
     print(f"   sim: {time.perf_counter() - t0:.1f} s, {len(out.pos_T_snapshots)} frames; final N_T={out.n_T[-1]}")
@@ -52,8 +52,8 @@ def render_phase(label: str, rho_I: int, alpha: float, seed: int) -> None:
         rho_I=rho_I,
         alpha=alpha,
         out_path=out_path,
-        fps=30,
-        title=f"{label.upper()}   ρ_I = {rho_I}   α = {alpha:.2f}",
+        fps=24,
+        title=label.upper(),
     )
 
 
@@ -68,7 +68,7 @@ def render_treatment() -> None:
     t0 = time.perf_counter()
     out = run_with_treatment(
         rho_I=rho_I, alpha=alpha, alpha_after=alpha_after,
-        t_treat=t_treat, seed=seed, params=base, snapshot_every=50,
+        t_treat=t_treat, seed=seed, params=base, snapshot_every=25,
     )
     print(f"   sim: {time.perf_counter() - t0:.1f} s, {len(out.pos_T_snapshots)} frames")
     out_path = ROOT / "outputs" / "videos" / "treatment.mp4"
@@ -83,8 +83,8 @@ def render_treatment() -> None:
         rho_I=rho_I,
         alpha=alpha,
         out_path=out_path,
-        fps=30,
-        title=f"TREATMENT   ρ_I = {rho_I}   α: {alpha:.1f} → {alpha_after:.1f}  @ t={t_treat:.0f}",
+        fps=24,
+        title=f"TREATMENT  (α: {alpha:.1f} → {alpha_after:.1f} @ t={t_treat:.0f})",
     )
 
 
