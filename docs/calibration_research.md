@@ -1,7 +1,7 @@
 # Calibration & Validation of the Tumor–Immune Active-Matter Model
 
 *Research notes for the Vibe Coding Active Matter & Biophysics Hackathon, UCSD, 2026-05.*
-*Author: I-Tsen Tsai (i3tsai@ucsd.edu).*
+*Authors: I-Shan Tsai (i3tsai@ucsd.edu), Chih-Yen Liu (chl250@ucsd.edu).*
 
 Audience: computational physicist with no biology background. **Jargon defined on first use.**
 Companion to `docs/model.md`. The model has parameters listed in §7 of that document;

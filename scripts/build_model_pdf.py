@@ -76,7 +76,8 @@ def build(out_pdf: Path):
         fig.text(0.5, 0.56, "Mathematical and physical model summary",
                   color=style.ACCENT, fontsize=18, ha="center")
         fig.text(0.5, 0.45,
-                  "I-Tsen Tsai   ·   i3tsai@ucsd.edu\n\n"
+                  "I-Shan Tsai (i3tsai@ucsd.edu)\n"
+                  "Chih-Yen Liu (chl250@ucsd.edu)\n\n"
                   "Vibe Coding Active Matter & Biophysics Hackathon\n"
                   "UCSD   ·   May 23, 2026",
                   color=style.MUTED, fontsize=13, ha="center")

@@ -516,20 +516,20 @@ def init_tme_state(params: TMEParams, seed: int = 0) -> dict:
     state["c_VEGF"] = c_VEGF
     state["c_DC"] = c_DC
 
-    # ---- vessels: seed as a short trunk on the left side; angiogenesis lets
-    # the trunk sprout/branch toward the tumor as VEGF builds up ----
+    # ---- vessels: seed as one or more sprout origins along the BOTTOM of
+    # the box; the renderer also draws a static horizontal "parent vessel"
+    # strip at y ≈ 0 to provide the visual baseline.  Sprouts grow upward
+    # toward the tumor as VEGF accumulates. ----
     nv0 = max(0, int(params.n_vessels_init))
     nvmax = max(nv0, int(params.n_vessels_max))
     vessels = np.zeros((nvmax, 2), dtype=np.float64)
     margin = float(params.vessel_edge_margin)
     if nv0 > 0:
-        # arrange as a short vertical trunk near the left edge so a single
-        # branched tree can grow rightward into the tumor
-        x_trunk = margin + 1.0
-        y_centers = np.linspace(0.30 * L, 0.70 * L, nv0)
+        x_centers = np.linspace(0.35 * L, 0.65 * L, nv0)
+        y_trunk = margin + 1.5
         for k in range(nv0):
-            x = x_trunk + rng.normal(0.0, 0.4)
-            y = y_centers[k] + rng.normal(0.0, 0.4)
+            x = x_centers[k] + rng.normal(0.0, 0.4)
+            y = y_trunk + rng.normal(0.0, 0.4)
             vessels[k, 0] = np.clip(x, 1.0, L - 1.0)
             vessels[k, 1] = np.clip(y, 1.0, L - 1.0)
     state["vessels"] = vessels

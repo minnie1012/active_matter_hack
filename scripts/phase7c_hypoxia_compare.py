@@ -38,7 +38,7 @@ from src.render_tme import (
 def default_params() -> TMEParams:
     """Same as phase7_tme_video.py — hypoxia ON."""
     return TMEParams(
-        T_final=60.0,
+        T_final=120.0,
         N_T_initial=40,
         N_I_initial=200,
         N_M_initial=80,
@@ -51,6 +51,8 @@ def default_params() -> TMEParams:
         p_phag=0.03,
         chi_s=12.0,
         D_VEGF=6.0,
+        n_vessels_init=1,
+        n_vessels_max=64,
     )
 
 

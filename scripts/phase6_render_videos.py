@@ -155,7 +155,7 @@ def _save_anim(fig, draw_fn, n_frames, out_path, fps=30, dpi=100):
 
 def video_macrophages():
     print("Video 1: macrophage polarization (no treatment)")
-    p = ExtendedParams(use_macrophages=True, T_final=80.0,
+    p = ExtendedParams(use_macrophages=True, T_final=160.0,
                        N_I_initial=300, N_M_initial=120, chi_s=5.0)
     t0 = time.perf_counter()
     out = run_extended(params=p, seed=5, snapshot_every=25)
@@ -332,8 +332,19 @@ def video_adhesion():
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    video_macrophages()
-    video_combo()
-    video_ecm()
-    video_adhesion()
-    print("\nAll extension videos rendered.")
+    import sys
+    selectors = {
+        "macrophage": video_macrophages,
+        "combo": video_combo,
+        "ecm": video_ecm,
+        "adhesion": video_adhesion,
+    }
+    args = sys.argv[1:]
+    targets = args if args else list(selectors)
+    for name in targets:
+        fn = selectors.get(name)
+        if fn is None:
+            print(f"  unknown target {name!r}; valid: {list(selectors)}")
+            continue
+        fn()
+    print("\nDone.")

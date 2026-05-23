@@ -1,7 +1,7 @@
 # Model summary — Tumor–Immune Active Matter
 
 **Project:** Vibe Coding Active Matter & Biophysics Hackathon, UCSD, 2026-05-23.
-**Author:** I-Tsen Tsai (i3tsai@ucsd.edu).
+**Authors:** I-Shan Tsai (i3tsai@ucsd.edu), Chih-Yen Liu (chl250@ucsd.edu).
 **Code:** [`src/sim.py`](../src/sim.py), [`src/fields.py`](../src/fields.py), [`src/interactions.py`](../src/interactions.py).
 
 This document collects every equation, parameter, numerical scheme, and assumption used in the simulation, in one place. It is intended to be read alongside the code — every symbol below has a name in `SimParams` you can grep for.
