@@ -1,0 +1,65 @@
+% simulation_summary.tex --- drop-in table for the paper or a slide.
+% Requires: \usepackage{booktabs, tabularx, array}
+% Use either \input{simulation_summary.tex} from your main document,
+% or copy the table environments directly.
+
+\begin{table}[h]
+\centering\small
+\caption{Simulation summary --- Model~1 (minimal three-species).}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabularx}{\textwidth}{@{}c l X X@{}}
+\toprule
+\# & \textbf{Figure / file} & \textbf{Mechanism tested} & \textbf{Result \& biology} \\
+\midrule
+1 & \texttt{phase\_diagram} &
+$(\rho_I,\,\alpha)$ sweep, $8\!\times\!8\!\times\!3$ seeds &
+Sharp bistable transition: clearance wedge / dormancy boundary / escape majority. Predicts a \emph{threshold} response to checkpoint inhibitors. \\
+2 & \texttt{phase6\_combo\_treatment} &
+Treatment knobs at $t\!=\!20$ (4 protocols) &
+Anti-PD-1 alone rescues; TAM repol alone fails (IL-10 self-locks M2); combo always rescues. \\
+3 & \texttt{phase6\_macrophage\_polarization} &
+Untreated 3-species; track $\langle p_k\rangle$ &
+Macrophages swing from neutral to M2 as $c_s$ accumulates; polarization is a continuum, slaved to the tumor's chemical halo. \\
+4 & \texttt{phase6\_heterogeneity\_pressure} &
+Byrne--Drasdo pressure gate on $p_{\text{div}}$ &
+Core cells stop dividing at $P_i\!\approx\!P^\star$ while surface cells continue; control phase becomes a genuine stable steady-state. \\
+5 & \texttt{phase6b\_ecm} &
+ECM density $\rho_{E,0}$ $\times$ MMP secretion &
+MMP carves a depleted-ECM \emph{cavity} around the tumor --- Friedl's trail-blazing invasion signature. \\
+6 & \texttt{phase6c\_adhesion} &
+Cadherin shoulder $k_{\text{adh}}$ $\times$ Vicsek torque &
+No adhesion $\to$ diffuse cells; weak $\to$ blob; strong+aligned $\to$ hexagonally packed sheet. Collective vs.\ single-cell invasion. \\
+\bottomrule
+\end{tabularx}
+\label{tab:m1-summary}
+\end{table}
+
+\bigskip
+
+\begin{table}[h]
+\centering\small
+\caption{Simulation summary --- Model~2 (biophysical TME).}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabularx}{\textwidth}{@{}c l X X@{}}
+\toprule
+\# & \textbf{Figure / file} & \textbf{Mechanism tested} & \textbf{Result \& biology} \\
+\midrule
+7 & \texttt{combined\_panel} &
+All Model-1 extensions enabled together &
+Cohesive cadherin tumor digests ECM, M2 ring forms, T cells excluded. Components compose coherently. \\
+8 & \texttt{tme\_panel} &
+Full TME: 8 cell species + vessels &
+At $t\!=\!90$ hypoxic fraction $= 83.8\%$. CAF ring physically blocks T cells $\to$ \emph{structural} immune exclusion. \\
+9 & \texttt{tme\_hypoxia\_compare} &
+Hypoxia + angiogenesis ON vs.\ OFF &
+With: $81.6\%$ hypoxic; vessels sprout. Without: $0\%$. Hypoxia couples to kill rate, EMT, suppressant secretion. \\
+10 & \texttt{biophysical\_panel} &
+EMT scalar $s_{T,i}$ + fibers + hypoxia, one run &
+$\langle s_T\rangle$ saturates to $1$; mesenchymal fraction $\to 100\%$; max invasion distance grows linearly. \\
+11 & \texttt{biophysical\_mechanism\_compare} &
+$2\times 2$ ablation: \{none, EMT+fibers, fibers+integrin, all\} &
+Only all three together produce the full invasive phenotype. Each ingredient contributes a distinct piece (enable / guide / harden). \\
+\bottomrule
+\end{tabularx}
+\label{tab:m2-summary}
+\end{table}
