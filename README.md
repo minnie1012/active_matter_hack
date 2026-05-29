@@ -21,7 +21,7 @@ We treat this trichotomy as an **active-matter phase diagram** and ask which phy
 
 Reference: `docs/model.md`, `overleaf/model.tex` / `docs/model.pdf`, `docs/simulation_summary.md`, `docs/extensions.md`.
 
-## Equations
+## Modeling setup
 
 ### Model 1 — minimal three-species system
 
